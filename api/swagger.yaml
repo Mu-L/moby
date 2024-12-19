@@ -1195,6 +1195,7 @@ definitions:
               - "default"
               - "process"
               - "hyperv"
+              - ""
           MaskedPaths:
             type: "array"
             description: |
@@ -4219,6 +4220,7 @@ definitions:
               - "default"
               - "process"
               - "hyperv"
+              - ""
           Init:
             description: |
               Run an init inside the container that forwards signals and reaps
@@ -5546,13 +5548,28 @@ definitions:
         type: "boolean"
         example: true
       BridgeNfIptables:
-        description: "Indicates if `bridge-nf-call-iptables` is available on the host."
+        description: |
+          Indicates if `bridge-nf-call-iptables` is available on the host when
+          the daemon was started.
+
+          <p><br /></p>
+
+          > **Deprecated**: netfilter module is now loaded on-demand and no longer
+          > during daemon startup, making this field obsolete. This field is always
+          > `false` and will be removed in a API v1.49.
         type: "boolean"
-        example: true
+        example: false
       BridgeNfIp6tables:
-        description: "Indicates if `bridge-nf-call-ip6tables` is available on the host."
+        description: |
+          Indicates if `bridge-nf-call-ip6tables` is available on the host.
+
+          <p><br /></p>
+
+          > **Deprecated**: netfilter module is now loaded on-demand, and no longer
+          > during daemon startup, making this field obsolete. This field is always
+          > `false` and will be removed in a API v1.49.
         type: "boolean"
-        example: true
+        example: false
       Debug:
         description: |
           Indicates if the daemon is running in debug-mode / with debug-level
@@ -5789,6 +5806,7 @@ definitions:
           - "default"
           - "hyperv"
           - "process"
+          - ""
       InitBinary:
         description: |
           Name and, optional, path of the `docker-init` binary.
@@ -11696,6 +11714,7 @@ paths:
             example:
               ListenAddr: "0.0.0.0:2377"
               AdvertiseAddr: "192.168.1.1:2377"
+              DataPathAddr: "192.168.1.1"
               RemoteAddrs:
                 - "node1:2377"
               JoinToken: "SWMTKN-1-3pu6hszjas19xyp7ghgosyx9k8atbfcr8p2is99znpy26u2lkl-7p73s1dx5in4tatdymyhg9hu2"
