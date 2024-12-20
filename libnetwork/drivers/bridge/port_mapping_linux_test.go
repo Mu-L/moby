@@ -14,6 +14,7 @@ import (
 
 	"github.com/containerd/log"
 	"github.com/docker/docker/internal/testutils/netnsutils"
+	"github.com/docker/docker/internal/testutils/storeutils"
 	"github.com/docker/docker/libnetwork/iptables"
 	"github.com/docker/docker/libnetwork/netlabel"
 	"github.com/docker/docker/libnetwork/ns"
@@ -27,7 +28,7 @@ import (
 
 func TestPortMappingConfig(t *testing.T) {
 	defer netnsutils.SetupTestOSContext(t)()
-	d := newDriver()
+	d := newDriver(storeutils.NewTempStore(t))
 
 	config := &configuration{
 		EnableIPTables: true,
@@ -111,7 +112,7 @@ func TestPortMappingV6Config(t *testing.T) {
 		t.Fatalf("Could not bring loopback iface up: %v", err)
 	}
 
-	d := newDriver()
+	d := newDriver(storeutils.NewTempStore(t))
 
 	config := &configuration{
 		EnableIPTables:  true,
@@ -828,7 +829,7 @@ func TestAddPortMappings(t *testing.T) {
 					GwModeIPv4: tc.gwMode4,
 					GwModeIPv6: tc.gwMode6,
 				},
-				driver: newDriver(),
+				driver: newDriver(storeutils.NewTempStore(t)),
 			}
 			genericOption := map[string]interface{}{
 				netlabel.GenericData: &configuration{
@@ -903,7 +904,7 @@ func TestAddPortMappings(t *testing.T) {
 				// Check the MASQUERADE rule.
 				masqRule := fmt.Sprintf("-s %s -d %s -p %s -m %s --dport %d -j MASQUERADE",
 					addrM, addrM, expPB.Proto, expPB.Proto, expPB.Port)
-				ir := iptRule{ipv: ipv, table: iptables.Nat, chain: "POSTROUTING", args: strings.Split(masqRule, " ")}
+				ir := iptables.Rule{IPVer: ipv, Table: iptables.Nat, Chain: "POSTROUTING", Args: strings.Split(masqRule, " ")}
 				if disableNAT || tc.proxyPath != "" {
 					assert.Check(t, !ir.Exists(), fmt.Sprintf("unexpected rule %s", ir))
 				} else {
@@ -921,7 +922,7 @@ func TestAddPortMappings(t *testing.T) {
 				}
 				dnatRule += fmt.Sprintf("-d %s -p %s -m %s --dport %d -j DNAT --to-destination %s:%d",
 					addrH, expPB.Proto, expPB.Proto, expPB.HostPort, addrD, expPB.Port)
-				ir = iptRule{ipv: ipv, table: iptables.Nat, chain: "DOCKER", args: strings.Split(dnatRule, " ")}
+				ir = iptables.Rule{IPVer: ipv, Table: iptables.Nat, Chain: "DOCKER", Args: strings.Split(dnatRule, " ")}
 				if disableNAT {
 					assert.Check(t, !ir.Exists(), fmt.Sprintf("unexpected rule %s", ir))
 				} else {
@@ -931,7 +932,7 @@ func TestAddPortMappings(t *testing.T) {
 				// Check that the container's port is open.
 				filterRule := fmt.Sprintf("-d %s ! -i dummybridge -o dummybridge -p %s -m %s --dport %d -j ACCEPT",
 					addrM, expPB.Proto, expPB.Proto, expPB.Port)
-				ir = iptRule{ipv: ipv, table: iptables.Filter, chain: "DOCKER", args: strings.Split(filterRule, " ")}
+				ir = iptables.Rule{IPVer: ipv, Table: iptables.Filter, Chain: "DOCKER", Args: strings.Split(filterRule, " ")}
 				assert.Check(t, ir.Exists(), fmt.Sprintf("expected rule %s", ir))
 			}
 

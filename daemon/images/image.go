@@ -7,7 +7,7 @@ import (
 	"io"
 
 	"github.com/containerd/containerd/content"
-	"github.com/containerd/containerd/images"
+	c8dimages "github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/leases"
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/containerd/log"
@@ -115,7 +115,7 @@ func (i *ImageService) manifestMatchesPlatform(ctx context.Context, img *image.I
 
 		for _, md := range ml.Manifests {
 			switch md.MediaType {
-			case ocispec.MediaTypeImageManifest, images.MediaTypeDockerSchema2Manifest:
+			case ocispec.MediaTypeImageManifest, c8dimages.MediaTypeDockerSchema2Manifest:
 			default:
 				continue
 			}
@@ -160,10 +160,6 @@ func (i *ImageService) manifestMatchesPlatform(ctx context.Context, img *image.I
 	}
 
 	return false, nil
-}
-
-func (i *ImageService) GetImageManifest(ctx context.Context, refOrID string, options backend.GetImageOpts) (*ocispec.Descriptor, error) {
-	panic("not implemented")
 }
 
 // GetImage returns an image corresponding to the image referred to by refOrID.

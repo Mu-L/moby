@@ -1,11 +1,11 @@
 //go:build unix && !linux
 
-package chrootarchive // import "github.com/docker/docker/pkg/chrootarchive"
+package chrootarchive
 
 import (
 	"testing"
 
-	"github.com/docker/docker/pkg/reexec"
+	"github.com/moby/sys/reexec"
 )
 
 func TestMain(m *testing.M) {

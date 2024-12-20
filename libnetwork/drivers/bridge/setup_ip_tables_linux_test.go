@@ -8,6 +8,7 @@ import (
 
 	"github.com/docker/docker/internal/nlwrap"
 	"github.com/docker/docker/internal/testutils/netnsutils"
+	"github.com/docker/docker/internal/testutils/storeutils"
 	"github.com/docker/docker/libnetwork/driverapi"
 	"github.com/docker/docker/libnetwork/iptables"
 	"github.com/docker/docker/libnetwork/netlabel"
@@ -52,15 +53,15 @@ func TestProgramIPTable(t *testing.T) {
 
 	// Store various iptables chain rules we care for.
 	rules := []struct {
-		rule  iptRule
+		rule  iptables.Rule
 		descr string
 	}{
-		{iptRule{ipv: iptables.IPv4, table: iptables.Filter, chain: "FORWARD", args: []string{"-d", "127.1.2.3", "-i", "lo", "-o", "lo", "-j", "DROP"}}, "Test Loopback"},
-		{iptRule{ipv: iptables.IPv4, table: iptables.Nat, chain: "POSTROUTING", args: []string{"-s", iptablesTestBridgeIP, "!", "-o", DefaultBridgeName, "-j", "MASQUERADE"}}, "NAT Test"},
-		{iptRule{ipv: iptables.IPv4, table: iptables.Filter, chain: "FORWARD", args: []string{"-o", DefaultBridgeName, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"}}, "Test ACCEPT INCOMING"},
-		{iptRule{ipv: iptables.IPv4, table: iptables.Filter, chain: "FORWARD", args: []string{"-i", DefaultBridgeName, "!", "-o", DefaultBridgeName, "-j", "ACCEPT"}}, "Test ACCEPT NON_ICC OUTGOING"},
-		{iptRule{ipv: iptables.IPv4, table: iptables.Filter, chain: "FORWARD", args: []string{"-i", DefaultBridgeName, "-o", DefaultBridgeName, "-j", "ACCEPT"}}, "Test enable ICC"},
-		{iptRule{ipv: iptables.IPv4, table: iptables.Filter, chain: "FORWARD", args: []string{"-i", DefaultBridgeName, "-o", DefaultBridgeName, "-j", "DROP"}}, "Test disable ICC"},
+		{iptables.Rule{IPVer: iptables.IPv4, Table: iptables.Filter, Chain: "FORWARD", Args: []string{"-d", "127.1.2.3", "-i", "lo", "-o", "lo", "-j", "DROP"}}, "Test Loopback"},
+		{iptables.Rule{IPVer: iptables.IPv4, Table: iptables.Nat, Chain: "POSTROUTING", Args: []string{"-s", iptablesTestBridgeIP, "!", "-o", DefaultBridgeName, "-j", "MASQUERADE"}}, "NAT Test"},
+		{iptables.Rule{IPVer: iptables.IPv4, Table: iptables.Filter, Chain: "FORWARD", Args: []string{"-o", DefaultBridgeName, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"}}, "Test ACCEPT INCOMING"},
+		{iptables.Rule{IPVer: iptables.IPv4, Table: iptables.Filter, Chain: "FORWARD", Args: []string{"-i", DefaultBridgeName, "!", "-o", DefaultBridgeName, "-j", "ACCEPT"}}, "Test ACCEPT NON_ICC OUTGOING"},
+		{iptables.Rule{IPVer: iptables.IPv4, Table: iptables.Filter, Chain: "FORWARD", Args: []string{"-i", DefaultBridgeName, "-o", DefaultBridgeName, "-j", "ACCEPT"}}, "Test enable ICC"},
+		{iptables.Rule{IPVer: iptables.IPv4, Table: iptables.Filter, Chain: "FORWARD", Args: []string{"-i", DefaultBridgeName, "-o", DefaultBridgeName, "-j", "DROP"}}, "Test disable ICC"},
 	}
 
 	// Assert the chain rules' insertion and removal.
@@ -133,7 +134,7 @@ func createTestBridge(config *networkConfiguration, br *bridgeInterface, t *test
 }
 
 // Assert base function which pushes iptables chain rules on insertion and removal.
-func assertIPTableChainProgramming(rule iptRule, descr string, t *testing.T) {
+func assertIPTableChainProgramming(rule iptables.Rule, descr string, t *testing.T) {
 	// Add
 	if err := programChainRule(rule, descr, true); err != nil {
 		t.Fatalf("Failed to program iptable rule %s: %s", descr, err.Error())
@@ -158,13 +159,13 @@ func assertChainConfig(d *driver, t *testing.T) {
 
 	err = setupHashNetIpset(ipsetExtBridges4, unix.AF_INET)
 	assert.NilError(t, err)
-	d.natChain, d.filterChain, d.isolationChain1, d.isolationChain2, err = setupIPChains(d.config, iptables.IPv4)
+	err = setupIPChains(d.config, iptables.IPv4)
 	assert.NilError(t, err)
 
 	if d.config.EnableIP6Tables {
 		err = setupHashNetIpset(ipsetExtBridges6, unix.AF_INET6)
 		assert.NilError(t, err)
-		d.natChainV6, d.filterChainV6, d.isolationChain1V6, d.isolationChain2V6, err = setupIPChains(d.config, iptables.IPv6)
+		err = setupIPChains(d.config, iptables.IPv6)
 		assert.NilError(t, err)
 	}
 }
@@ -191,7 +192,7 @@ func assertBridgeConfig(config *networkConfiguration, br *bridgeInterface, d *dr
 // Regression test for https://github.com/moby/moby/issues/46445
 func TestSetupIP6TablesWithHostIPv4(t *testing.T) {
 	defer netnsutils.SetupTestOSContext(t)()
-	d := newDriver()
+	d := newDriver(storeutils.NewTempStore(t))
 	dc := &configuration{
 		EnableIPTables:  true,
 		EnableIP6Tables: true,
@@ -364,7 +365,7 @@ func TestOutgoingNATRules(t *testing.T) {
 				EnableIP6Tables: tc.enableIP6Tables,
 			}
 			r := &testRegisterer{t: t}
-			if err := Register(r, map[string]interface{}{netlabel.GenericData: dc}); err != nil {
+			if err := Register(r, storeutils.NewTempStore(t), map[string]interface{}{netlabel.GenericData: dc}); err != nil {
 				t.Fatal(err)
 			}
 			if r.d == nil {
@@ -411,14 +412,14 @@ func TestOutgoingNATRules(t *testing.T) {
 			}
 			for _, rc := range []struct {
 				want bool
-				rule iptRule
+				rule iptables.Rule
 			}{
 				// Rule order doesn't matter: At most one of the following IPv4 rules will exist, and the
 				// same goes for the IPv6 rules.
-				{tc.wantIPv4Masq, iptRule{iptables.IPv4, iptables.Nat, "POSTROUTING", []string{"-s", maskedBrIPv4.String(), "!", "-o", br, "-j", "MASQUERADE"}}},
-				{tc.wantIPv4Snat, iptRule{iptables.IPv4, iptables.Nat, "POSTROUTING", []string{"-s", maskedBrIPv4.String(), "!", "-o", br, "-j", "SNAT", "--to-source", hostIPv4.String()}}},
-				{tc.wantIPv6Masq, iptRule{iptables.IPv6, iptables.Nat, "POSTROUTING", []string{"-s", maskedBrIPv6.String(), "!", "-o", br, "-j", "MASQUERADE"}}},
-				{tc.wantIPv6Snat, iptRule{iptables.IPv6, iptables.Nat, "POSTROUTING", []string{"-s", maskedBrIPv6.String(), "!", "-o", br, "-j", "SNAT", "--to-source", hostIPv6.String()}}},
+				{tc.wantIPv4Masq, iptables.Rule{IPVer: iptables.IPv4, Table: iptables.Nat, Chain: "POSTROUTING", Args: []string{"-s", maskedBrIPv4.String(), "!", "-o", br, "-j", "MASQUERADE"}}},
+				{tc.wantIPv4Snat, iptables.Rule{IPVer: iptables.IPv4, Table: iptables.Nat, Chain: "POSTROUTING", Args: []string{"-s", maskedBrIPv4.String(), "!", "-o", br, "-j", "SNAT", "--to-source", hostIPv4.String()}}},
+				{tc.wantIPv6Masq, iptables.Rule{IPVer: iptables.IPv6, Table: iptables.Nat, Chain: "POSTROUTING", Args: []string{"-s", maskedBrIPv6.String(), "!", "-o", br, "-j", "MASQUERADE"}}},
+				{tc.wantIPv6Snat, iptables.Rule{IPVer: iptables.IPv6, Table: iptables.Nat, Chain: "POSTROUTING", Args: []string{"-s", maskedBrIPv6.String(), "!", "-o", br, "-j", "SNAT", "--to-source", hostIPv6.String()}}},
 			} {
 				assert.Equal(t, rc.rule.Exists(), rc.want)
 			}
@@ -492,7 +493,7 @@ func TestMirroredWSL2Workaround(t *testing.T) {
 				config.UserlandProxyPath = "some-proxy"
 				config.EnableUserlandProxy = true
 			}
-			_, _, _, _, err := setupIPChains(config, iptables.IPv4)
+			err := setupIPChains(config, iptables.IPv4)
 			assert.NilError(t, err)
 			assert.Check(t, is.Equal(mirroredWSL2Rule().Exists(), tc.expLoopback0Rule))
 		})
